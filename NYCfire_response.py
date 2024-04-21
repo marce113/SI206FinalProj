@@ -18,43 +18,15 @@ import re
     to the scene from when the call was made), and the time that the call was made. 
 '''
 
-
-
-#create Database
-#pulls data from APi and puts it into database
-#using code from Discussion 12
-def set_up_database(db_name):
-    path = os.path.dirname(os.path.abspath(__file__))
-    conn = sqlite3.connect(path + "/" + db_name)
-    cur = conn.cursor()
-    return cur, conn
-
-    #create table for structural fires in NYC 
-    #filter clasification by contains Incident type  structural fire
-    #calculate response time based on first on scene and incident time 
-    #save processed table 
-def create_first_table(cur, conn):
-    cur.execute(
-        '''
-            CREATE TABLE IF NOT EXISTS "StructFires" (
-                "fire_id" INTEGER PRIMARY KEY, 
-                "Date" TEXT,
-                "Time" NUMBER, 
-                "Response_time" INTEGER,
-                "neighborhood" Text,
-                '''
-            )
-    conn.commit()
-
-
 #pulls from APi and creats a Json with all the data about structural fires
-def get_struct_fire_data():
+def get_fire_data(classification_group):
     '''
     creates API request
     creates json with all the data from request 
     '''
-    base_url = "https://data.cityofnewyork.us/resource/8m42-w767.json?incident_classification_group=Structural Fires"
-    response = requests.get(base_url)
+    base_url = "https://data.cityofnewyork.us/resource/8m42-w767.json"
+    response = requests.get(base_url, params= {"incident_classification_group": classification_group})
+    print (response.status_code)
 
     if response.status_code == 200:
         data = response.json()
@@ -74,12 +46,46 @@ def get_struct_fire_data():
         print("Failed to retrieve data from the API. Status code:", response.status_code)
 
 
+#create Database
+#pulls data from APi and puts it into database
+#using code from Discussion 12
+def set_up_database(db_name):
+    path = os.path.dirname(os.path.abspath(__file__))
+    conn = sqlite3.connect(path + "/" + db_name)
+    cur = conn.cursor()
+    return cur, conn
+
+    #create table for structural fires in NYC 
+    #calculate response time based on first on scene and incident time 
+    #save processed table 
+def create_first_table(cur, conn):
+    cur.execute(
+        '''
+            CREATE TABLE IF NOT EXISTS "Fires" (
+                "Fire_id" INTEGER PRIMARY KEY, 
+                "Date" TEXT,
+                "Time" NUMBER, 
+                "Response_time" INTEGER
+                '''
+            )
+    conn.commit()
+
+#Function to add Structural Fires 
+def add_fires_from_json(filename, cur, conn):
+    f = open(filename)
+    file_data = f.read()
+
+    
+
+
+
 #step 2 
 
 def main():
     NonStructural_Fires_url = "https://data.cityofnewyork.us/resource/8m42-w767.json?incident_classification_group=NonStructural Fires"
-    get_struct_fire_data()
+    get_fire_data("Structural Fires")
+    get_fire_data("NonStructural Fires")
 
-
-
+if __name__ == "__main__":
+    main()
 

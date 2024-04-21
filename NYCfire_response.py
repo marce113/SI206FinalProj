@@ -5,6 +5,7 @@ import os
 import unittest
 import requests
 import re
+from datetime import datetime
 
 
 '''In this File we will get the data from our API's and save them into a shared data base.
@@ -32,16 +33,16 @@ def get_fire_data(classification_group):
         data = response.json()
  
         try:
-            with open("data.json", "r") as json_file:
+            with open("NYC_data.json", "r") as json_file:
                 existing_data = json.load(json_file)
         except (FileNotFoundError, json.decoder.JSONDecodeError):
             existing_data = []
  
         existing_data.append(data)
  
-        with open("data.json", "w") as json_file:
+        with open("NYC_data.json", "w") as json_file:
             json.dump(existing_data, json_file, indent=4)
-            print("Data appended to data.json file.")
+            print("Data appended to NYC_data.json file.")
     else:
         print("Failed to retrieve data from the API. Status code:", response.status_code)
 
@@ -74,7 +75,16 @@ def create_first_table(cur, conn):
 def add_fires_from_json(filename, cur, conn):
     f = open(filename)
     file_data = f.read()
+    f.close()
+    json_data = json.loads(file_data)
 
+    Fire_id = 1
+    for data in json_data:
+        Date = data["first_activation_datetime"].split("T")[0]
+        Time =  data["first_activation_datetime"].split("T")[1]
+        first_activation_datetime = datetime.strptime(data["first_assignment_datetime"], "%Y-%m-%dT%H:%M:%S.%f")
+        first_on_scene_datetime = datetime.strptime(data["first_on_scene_datetime"], "%Y-%m-%dT%H:%M:%S.%f")
+        Response_time = data
     
 
 

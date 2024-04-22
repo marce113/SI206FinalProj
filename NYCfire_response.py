@@ -133,6 +133,8 @@ def main():
     try:
         cur, conn = set_up_database("fire_data.db")
         create_first_table(cur, conn)
+
+        with open
         total_entries = 0
         while total_entries < 100:
             total_entries += add_fires_from_json("NYC_data.json", cur, conn)

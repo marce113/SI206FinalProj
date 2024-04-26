@@ -62,84 +62,71 @@ def set_up_database(db_name):
 def create_first_table(cur, conn):
     cur.execute(
         '''
-            CREATE TABLE IF NOT EXISTS "Fires" (
-                "Fire_id" INTEGER PRIMARY KEY, 
-                "Date" TEXT,
-                "Time" TEXT, 
-                "Response_time" INTEGER
-                '''
-            )
+        CREATE TABLE IF NOT EXISTS "Fires" (
+            "Fire_id" INTEGER PRIMARY KEY, 
+            "Date" TEXT,
+            "Time" TEXT, 
+            "Response_time" FLOAT
+        )
+        '''
+    )
     conn.commit()
 
-#Function to add Structural Fires 
-def add_fires_from_json(filename, cur, conn):
-    with open(filename) as f:
-        json_data = json.load(f)
 
-    valid_fires = []  # List to store fires with a valid response time
-    fire_counter = 0  # Counter to track the number of entries uploaded
+def insert_data_to_fires_table(cur, conn, json_data):
+    batch_size = 25
+    total_entries = 0  # initializes total entries processed
 
-    # Retrieve the maximum Fire_id from the database
-    cur.execute("SELECT MAX(Fire_id) FROM Fires")
-    max_fire_id = cur.fetchone()[0]  # Get the maximum Fire_id, or None if there are no entries
+    for i in range(0, min(len(json_data), 100), batch_size):
+        batch = json_data[i:i + batch_size]  # slices data into batches of 25 or less
 
-    if max_fire_id is None:
-        Fire_id = 1  # Start Fire_id from 1 if the database is empty
-    else:
-        Fire_id = max_fire_id + 1  # Start Fire_id from the maximum value plus one
+        processed_data = []  # stores batch data
 
-    # Add valid fire incidents to the list
-    for data in json_data:
-        if data.get("valid_incident_rspns_time_indc") == "Y":
-            valid_fires.append(data)
-            fire_counter += 1
+        for inner_list in batch:
+            for data in inner_list:
+                try:
+                    if data.get("valid_incident_rspns_time_indc") == "Y":
+                        Date = data["first_activation_datetime"].split("T")[0]
+                        Time = data["first_activation_datetime"].split("T")[1]
+                        Response_time = float(data["incident_response_seconds_qy"]) / 60
 
-            if fire_counter % 25 == 0:
-                # Now 'valid_fires' contains only the dictionaries with "valid_incident_rspns_time_indc" equal to "Y"
-                for fire in valid_fires:
-                    Date = fire["first_activation_datetime"].split("T")[0]
-                    Time = fire["first_activation_datetime"].split("T")[1]
-                    Response_time = float(fire["incident_response_seconds_qy"]) / 60
+                        processed_data.append((Date, Time, Response_time))
+                        total_entries += 1
+                except KeyError as e:
+                    print("Key Error:", e, "Skipping this data entry.")
 
-                    cur.execute('''
-                        INSERT INTO Fires (
-                            Fire_id, Date, Time, Response_Time) 
-                            VALUES(?,?,?,?)''',
-                                (Fire_id, Date, Time, Response_time)
-                            )
-                    Fire_id += 1
+        # Insert the batch of processed data into the database
+        cur.executemany(
+            '''
+            INSERT INTO Fires (Date, Time, Response_time) 
+            VALUES (?, ?, ?)
+            ''',
+            processed_data
+        )
 
-                conn.commit()
+        conn.commit()  # Commit the transaction
 
-                # Reset the valid_fires list for the next batch
-                valid_fires = []
-
-            # Break out of the loop if we have reached 100 entries
-            if fire_counter >= 100:
-                break
-
-    return fire_counter  # Return the total number of entries uploaded
-    
-
-
+        if total_entries >= 100:
+            break  # Break the loop if 100 entries have been processed
 
 #step 2 
 
 def main():
-    NonStructural_Fires_url = "https://data.cityofnewyork.us/resource/8m42-w767.json?incident_classification_group=NonStructural Fires"
     get_fire_data("Structural Fires")
     get_fire_data("NonStructural Fires")
 
     try:
-        cur, conn = set_up_database("fire_data.db")
+        #set up the database
+        cur, conn = set_up_database("nyc.db")
         create_first_table(cur, conn)
+        with open("NYC_data.json", "r") as json_file:
+            NYC_data = json.load(json_file)
 
-        with open
-        total_entries = 0
-        while total_entries < 100:
-            total_entries += add_fires_from_json("NYC_data.json", cur, conn)
+        insert_data_to_fires_table(cur, conn, NYC_data)
+
+        conn.close()  # Close the database connection after insertion 
     except Exception as e:
-        print("an error has occured:", e)
+        print("An error has occured:", e)
 
 
 if __name__ == "__main__":

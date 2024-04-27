@@ -27,7 +27,6 @@ def get_fire_data(classification_group):
     '''
     base_url = "https://data.cityofnewyork.us/resource/8m42-w767.json"
     response = requests.get(base_url, params= {"incident_classification_group": classification_group})
-    print (response.status_code)
 
     if response.status_code == 200:
         data = response.json()
@@ -59,14 +58,25 @@ def set_up_database(db_name):
     #create table for structural fires in NYC 
     #calculate response time based on first on scene and incident time 
     #save processed table 
-def create_first_table(cur, conn):
+def create_first_nyc_table(cur, conn):
     cur.execute(
         '''
-        CREATE TABLE IF NOT EXISTS "Fires" (
+        CREATE TABLE IF NOT EXISTS "NYC_Fires" (
             "Fire_id" INTEGER PRIMARY KEY, 
             "Date" TEXT,
             "Time" TEXT, 
             "Response_time" FLOAT
+        )
+        '''
+    )
+    conn.commit()
+
+def create_neighborhood_table(cur, conn):
+    cur.execute(
+        '''
+        CREATE TABLE IF NOT EXISTS "Neighborhoods" (
+            "Neighborhood_id" INTEGER PRIMARY KEY, 
+            "Nighborhood" TEXT,
         )
         '''
     )
@@ -77,7 +87,7 @@ def insert_data_to_fires_table(cur, conn, json_data):
     batch_size = 25
     total_entries = 0  # initializes total entries processed
 
-    for i in range(0, min(len(json_data), 100), batch_size):
+    for i in range(0, 101, batch_size):
         batch = json_data[i:i + batch_size]  # slices data into batches of 25 or less
 
         processed_data = []  # stores batch data
@@ -87,18 +97,26 @@ def insert_data_to_fires_table(cur, conn, json_data):
                 try:
                     if data.get("valid_incident_rspns_time_indc") == "Y":
                         Date = data["first_activation_datetime"].split("T")[0]
-                        Time = data["first_activation_datetime"].split("T")[1]
-                        Response_time = float(data["incident_response_seconds_qy"]) / 60
+                        Time = data["first_activation_datetime"].split("T")[1][:5]
+                        Response_time = round(float(data["incident_response_seconds_qy"]) / 60, 2)
 
                         processed_data.append((Date, Time, Response_time))
                         total_entries += 1
+                        print(total_entries)
+
+                        if total_entries >= 100:
+                            break  # Break the loop if 100 entries have been processed
+
+            
                 except KeyError as e:
                     print("Key Error:", e, "Skipping this data entry.")
-
-        # Insert the batch of processed data into the database
+        
+            if total_entries >= 100:
+                break  # Break the loop if 100 entries have been processed
+        
         cur.executemany(
             '''
-            INSERT INTO Fires (Date, Time, Response_time) 
+            INSERT INTO NYC_Fires (Date, Time, Response_time) 
             VALUES (?, ?, ?)
             ''',
             processed_data
@@ -107,9 +125,14 @@ def insert_data_to_fires_table(cur, conn, json_data):
         conn.commit()  # Commit the transaction
 
         if total_entries >= 100:
-            break  # Break the loop if 100 entries have been processed
+                break  # Break the loop if 100 entries have been processed
 
-#step 2 
+    
+#insert into Neighborhood table
+
+#step 2 Calculate something from the data
+
+
 
 def main():
     get_fire_data("Structural Fires")
@@ -117,12 +140,19 @@ def main():
 
     try:
         #set up the database
-        cur, conn = set_up_database("nyc.db")
-        create_first_table(cur, conn)
+        cur, conn = set_up_database("fire_data.db")
+        create_first_nyc_table(cur, conn)
         with open("NYC_data.json", "r") as json_file:
             NYC_data = json.load(json_file)
 
         insert_data_to_fires_table(cur, conn, NYC_data)
+
+        # Call the calculate_avg_fires_per_2hr function
+        
+
+         # Write the average to a text file
+        #with open("calculations.txt", 'w') as f:
+         #   f.write("In 2021 The average number of fires per day in NYC for January 4th to January 5th was {:.2f}".format(avg_fires_per_day))
 
         conn.close()  # Close the database connection after insertion 
     except Exception as e:

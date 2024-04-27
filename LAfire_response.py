@@ -39,7 +39,7 @@ def set_up_database(db_name):
 def create_first_table(cur, conn):
     cur.execute(
         '''
-        CREATE TABLE IF NOT EXISTS "Fires" (
+        CREATE TABLE IF NOT EXISTS "LA_Fires" (
             "Fire_id" INTEGER PRIMARY KEY, 
             "Time" TEXT, 
             "Response_time" FLOAT
@@ -85,7 +85,7 @@ def insert_data_to_fires_table(cur, conn, json_data):
         # Insert data from the buffer into the table
         cur.executemany(
             '''
-            INSERT INTO Fires (Time, Response_time) 
+            INSERT INTO LA_Fires (Time, Response_time) 
             VALUES (?, ?)
             ''',
             data_buffer
@@ -103,7 +103,7 @@ def insert_data_to_fires_table(cur, conn, json_data):
 
 def main():
     try:
-        cur, conn = set_up_database("la.db")  # Corrected: "la.db" should be a string
+        cur, conn = set_up_database("fire_data.db")  # Corrected: "la.db" should be a string
         create_first_table(cur, conn)
         with open("LA_data.json", "r") as json_file:
             LA_data = json.load(json_file)

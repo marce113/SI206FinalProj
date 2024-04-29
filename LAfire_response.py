@@ -8,7 +8,7 @@ def get_fire_dep_data(classification_group):
     response = requests.get(base_url, params={"$where": "on_scene_time_gmt IS NOT NULL"})
 
     try:
-        response.raise_for_status()  # Raise an exception for HTTP errors
+        response.raise_for_status()  
         data = response.json()
         if data:
             try:
@@ -16,7 +16,7 @@ def get_fire_dep_data(classification_group):
                     existing_data = json.load(json_file)
             except (FileNotFoundError, json.decoder.JSONDecodeError):
                 existing_data = []
-            # Append only the relevant entries to existing data
+  
             existing_data.extend(data)
             with open("LA_data.json", "w") as json_file:
                 json.dump(existing_data, json_file, indent=4)
@@ -47,53 +47,66 @@ def create_first_table(cur, conn):
         '''
     )
 
-def insert_data_to_fires_table(cur, conn, json_data):
+def insert_data_to_fires_table(cur, conn):
     total_entries = 0
+    total_batches = 0  
 
-    # Initialize a dictionary to keep track of the number of batches per 2-hour period
     batches_per_period = {}
 
-    for data in json_data:
-        try:
-            if "on_scene_time_gmt" in data and "incident_creation_time_gmt" in data:
-                # Extract incident creation and on-scene times
-                incident_creation_time = data["incident_creation_time_gmt"]
-                on_scene_time = data["on_scene_time_gmt"]
+    base_url = "https://data.lacity.org/resource/n44u-wxe4.json"
+    response = requests.get(base_url, params={"$where": "on_scene_time_gmt IS NOT NULL"})
 
-                # Extract the hour from incident creation time
-                hour = incident_creation_time.split(":")[0]
+    try:
+        response.raise_for_status()  
+        data = response.json()
 
-                # Check if this hour already has 4 batches
-                if hour not in batches_per_period:
-                    batches_per_period[hour] = 1
-                elif batches_per_period[hour] >= 4:
-                    continue  # Skip this entry if we've reached the batch limit
-                else:
-                    batches_per_period[hour] += 1
+        for data_entry in data:
+            try:
+                if "on_scene_time_gmt" in data_entry and "incident_creation_time_gmt" in data_entry:
+                    # Extract incident creation and on-scene times
+                    incident_creation_time = data_entry["incident_creation_time_gmt"]
+                    on_scene_time = data_entry["on_scene_time_gmt"]
 
-                # Calculate the response time in minutes
-                response_time = (datetime.strptime(on_scene_time, "%H:%M:%S.%f") - datetime.strptime(incident_creation_time, "%H:%M:%S.%f")).total_seconds() / 60
-                response_time = round(response_time, 2)
+            
+                    hour = incident_creation_time.split(":")[0]
 
-                # Add the data to the database
-                cur.execute(
-                    '''
-                    INSERT INTO LA_Fires (Time, Response_time) 
-                    VALUES (?, ?)
-                    ''',
-                    (incident_creation_time[:2] + ":00", response_time)
-                )
-                conn.commit()
-                total_entries += 1
+              
+                    if total_batches >= 100:
+                        break
 
-                # Break the loop if we've processed 100 entries
-                if total_entries >= 100:
-                    break
+                    if hour not in batches_per_period:
+                        batches_per_period[hour] = 1
+                    elif batches_per_period[hour] >= 8:
+                        continue 
+                    else:
+                        batches_per_period[hour] += 1
 
-        except KeyError:
-            print("Skipping incomplete data entry.")
+              
+                    response_time = (datetime.strptime(on_scene_time, "%H:%M:%S.%f") - datetime.strptime(incident_creation_time, "%H:%M:%S.%f")).total_seconds() / 60
+                    response_time = round(response_time, 2)
 
-    print("Data insertion completed.")
+                    cur.execute(
+                        '''
+                        INSERT INTO LA_Fires (Time, Response_time) 
+                        VALUES (?, ?)
+                        ''',
+                        (incident_creation_time[:2] + ":00", response_time)
+                    )
+                    conn.commit()
+                    total_entries += 1
+                    total_batches += 1 
+
+            except KeyError:
+                print("Skipping incomplete data entry.")
+
+        print("Data insertion completed.")
+
+    except requests.exceptions.HTTPError as err:
+        print("HTTP error occurred:", err)
+    except json.decoder.JSONDecodeError as err:
+        print("Error decoding JSON response:", err)
+
+
 
 
 
@@ -102,21 +115,22 @@ def insert_data_to_fires_table(cur, conn, json_data):
 def calculate_avg_response_time_per_period(cur, conn):
     try:
         cur.execute('''
-            SELECT CAST(SUBSTR(Time, 1, 2) AS INTEGER) AS hour,
-                   ROUND(AVG(Response_time), 2) AS avg_response_time
+            SELECT 
+                ((CAST(SUBSTR(Time, 1, 2) AS INTEGER) + 1) / 2) % 12 AS period,
+                ROUND(AVG(Response_time), 2) AS avg_response_time
             FROM LA_Fires
-            GROUP BY hour
+            GROUP BY period
         ''')
 
         avg_response_times_per_period = cur.fetchall()
 
-        with open("calculations.txt", 'a') as f:  # Append to the file
+        with open("calculations.txt", 'a') as f:  
             f.write("\nAverage response time per 2-hour period in LA:\n")
-            for hour, avg_response_time in avg_response_times_per_period:
-                period_start = "{:02d}:00".format(hour)
-                period_end = "{:02d}:59".format((hour + 1) % 24)  # Next hour minus 1 minute
-                period = f"{period_start} - {period_end}"
-                f.write(f"{period}: {avg_response_time} minutes\n")
+            for period, avg_response_time in avg_response_times_per_period:
+                period_start = "{:02d}:00".format((period * 2) % 24)
+                period_end = "{:02d}:59".format((period * 2 + 1) % 24)
+                period_str = f"{period_start} - {period_end}"
+                f.write(f"{period_str}: {avg_response_time} minutes\n")
 
         print("Average response time per 2-hour period calculated and written to calculations.txt.")
     except Exception as e:
@@ -125,13 +139,13 @@ def calculate_avg_response_time_per_period(cur, conn):
 
 def main():
     try:
-        cur, conn = set_up_database("fire_data.db")  # Corrected: "la.db" should be a string
+        cur, conn = set_up_database("fire_data.db")  
         create_first_table(cur, conn)
         with open("LA_data.json", "r") as json_file:
             LA_data = json.load(json_file)
 
-        insert_data_to_fires_table(cur, conn, LA_data) 
-        calculate_avg_response_time_per_period(cur, conn) # Corrected: Call insert_data_to_fires_table
+        insert_data_to_fires_table(cur, conn, ) 
+        calculate_avg_response_time_per_period(cur, conn)
 
         conn.close()
     except Exception as e:

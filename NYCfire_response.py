@@ -228,12 +228,56 @@ def insert_data_to_neighborhood_table(cur, conn, json_data):
                 break  # Break the loop if 100 entries have been processed
 
         conn.commit()  # Commit the transaction
-        
+
         if total_entries >= 100:
             break  # Break the loop if 100 entries have been processed
 
 
 #step 2 Calculate something from the data
+def calculate_avg_fires_per_neighborhood(cur, conn):
+    try:
+        cur.execute('''
+            SELECT neighborhood_ID.Neighborhood, COUNT(NYC_Fires.Fire_id) AS num_fires
+            FROM neighborhood_ID
+            LEFT JOIN Fire_Neighborhood_Relationship ON neighborhood_ID.Neighborhood_ID = Fire_Neighborhood_Relationship.Neighborhood_ID
+            LEFT JOIN NYC_Fires ON Fire_Neighborhood_Relationship.Fire_ID = NYC_Fires.Fire_id
+            GROUP BY neighborhood_ID.Neighborhood
+        ''')
+
+        avg_fires_per_neighborhood = cur.fetchall()
+
+        with open("calculations.txt", 'w') as f:
+            f.write("Average number of fires per neighborhood:\n")
+            for neighborhood, num_fires in avg_fires_per_neighborhood:
+                f.write(f"{neighborhood}: {num_fires}\n")
+
+        print("Average number of fires per neighborhood calculated and written to calculations.txt.")
+    except Exception as e:
+        print("An error occurred while calculating the average number of fires per neighborhood:", e)
+
+#function that calculates average response time for 2 hour time periods for fires in NYC 
+def calculate_avg_response_time_per_period(cur, conn):
+    try:
+        cur.execute('''
+            SELECT CAST(SUBSTR(Time, 1, 2) AS INTEGER) AS hour,
+                   ROUND(AVG(Response_time), 2) AS avg_response_time
+            FROM NYC_Fires
+            GROUP BY hour
+        ''')
+
+        avg_response_times_per_period = cur.fetchall()
+
+        with open("calculations.txt", 'a') as f:  # Append to the file
+            f.write("\nAverage response time per 2-hour period in NYC:\n")
+            for hour, avg_response_time in avg_response_times_per_period:
+                period_start = "{:02d}:00".format(hour)
+                period_end = "{:02d}:59".format((hour + 1) % 24)  # Next hour minus 1 minute
+                period = f"{period_start} - {period_end}"
+                f.write(f"{period}: {avg_response_time} minutes\n")
+
+        print("Average response time per 2-hour period calculated and written to calculations.txt.")
+    except Exception as e:
+        print("An error occurred while calculating the average response time per period:", e)
 
 
 
@@ -252,12 +296,8 @@ def main():
         insert_data_to_fires_table(cur, conn, NYC_data)
         insert_data_to_neighborhood_table(cur, conn, NYC_data)
 
-        # Call the calculate_avg_fires_per_2hr function
-        
-
-         # Write the average to a text file
-        #with open("calculations.txt", 'w') as f:
-         #   f.write("In 2021 The average number of fires per day in NYC for January 4th to January 5th was {:.2f}".format(avg_fires_per_day))
+        calculate_avg_fires_per_neighborhood(cur, conn)
+        calculate_avg_response_time_per_period(cur, conn)
 
         conn.close()  # Close the database connection after insertion 
     except Exception as e:

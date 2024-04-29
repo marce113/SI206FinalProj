@@ -171,10 +171,16 @@ def insert_data_to_neighborhood_table(cur, conn, json_data):
                     if data.get("valid_incident_rspns_time_indc") == "Y":
                         neighborhood = data["incident_borough"]
                         
-                        # Check if the neighborhood has already been added
-                        if neighborhood not in neighborhoods_set:
-                            neighborhoods_set.add(neighborhood)
-                            
+                        # Check if the neighborhood already exists in the neighborhood_ID table
+                        cur.execute(
+                            '''
+                            SELECT Neighborhood_ID FROM neighborhood_ID WHERE Neighborhood = ?
+                            ''',
+                            (neighborhood,)
+                        )
+                        existing_neighborhood = cur.fetchone()
+                        
+                        if existing_neighborhood is None:
                             # Insert neighborhoods into the neighborhood_ID table
                             cur.execute(
                                 '''
@@ -187,10 +193,13 @@ def insert_data_to_neighborhood_table(cur, conn, json_data):
                         #retrieve the Neighborhood_ID of the inserted neighborhood
                         cur.execute(
                                 '''
-                                SELECT last_insert_rowid()                                
-                                '''
+                                SELECT Neighborhood_ID FROM neighborhood_ID WHERE Neighborhood = ?                                
+                                ''',
+                                (neighborhood,)
                             )
                         neighborhood_id = cur.fetchone()[0]   
+                    else:
+                        neighborhood_id = existing_neighborhood[0]
 
                          # Insert the relationship into the Fire_Neighborhood_Relationship table
                         cur.execute(
@@ -212,14 +221,17 @@ def insert_data_to_neighborhood_table(cur, conn, json_data):
                     
                 except KeyError as e:
                     print("Key Error:", e, "Skipping this data entry.")
+                except Exception as ex:
+                    print("Error occurred:", ex)  # Log any other exceptions
         
             if total_entries >= 100:
                 break  # Break the loop if 100 entries have been processed
-        
-        conn.commit()  # Commit the transaction
 
+        conn.commit()  # Commit the transaction
+        
         if total_entries >= 100:
             break  # Break the loop if 100 entries have been processed
+
 
 #step 2 Calculate something from the data
 

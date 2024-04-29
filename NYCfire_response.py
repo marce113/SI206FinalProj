@@ -53,11 +53,24 @@ def set_up_database(db_name):
     path = os.path.dirname(os.path.abspath(__file__))
     conn = sqlite3.connect(path + "/" + db_name)
     cur = conn.cursor()
+
+    # Drop existing tables if they exist
+    cur.execute("DROP TABLE IF EXISTS NYC_Fires")
+    cur.execute("DROP TABLE IF EXISTS neighborhood_ID")
+    cur.execute("DROP TABLE IF EXISTS Fire_Neighborhood_Relationship")
+    conn.commit()
+
     return cur, conn
 
-    #create table for structural fires in NYC 
-    #calculate response time based on first on scene and incident time 
-    #save processed table 
+#function to delete database so that I have a fresh db when we run the program
+def delete_database(db_name):
+    if os.path.exists(db_name):
+        os.remove(db_name)
+        print(f"Deleted existing database file: {db_name}")
+
+#create table for structural fires in NYC 
+#calculate response time based on first on scene and incident time 
+#save processed table 
 def create_first_nyc_table(cur, conn):
     cur.execute(
         '''
@@ -74,9 +87,22 @@ def create_first_nyc_table(cur, conn):
 def create_neighborhood_table(cur, conn):
     cur.execute(
         '''
-        CREATE TABLE IF NOT EXISTS "Neighborhoods" (
-            "Neighborhood_id" INTEGER PRIMARY KEY, 
-            "Nighborhood" TEXT,
+        CREATE TABLE IF NOT EXISTS "neighborhood_ID" (
+            "Neighborhood_ID" INTEGER PRIMARY KEY AUTOINCREMENT, 
+            "Neighborhood" TEXT
+        )
+        '''
+    )
+    conn.commit()
+
+def create_fire_neighborhood_relationship_table(cur, conn):
+    cur.execute(
+        '''
+        CREATE TABLE IF NOT EXISTS Fire_Neighborhood_Relationship (
+            Fire_ID INTEGER,
+            Neighborhood_ID INTEGER,
+            FOREIGN KEY(Fire_ID) REFERENCES NYC_Fires(Fire_ID),
+            FOREIGN KEY(Neighborhood_ID) REFERENCES Neighborhoods(Neighborhood_ID)
         )
         '''
     )
@@ -102,7 +128,7 @@ def insert_data_to_fires_table(cur, conn, json_data):
 
                         processed_data.append((Date, Time, Response_time))
                         total_entries += 1
-                        print(total_entries)
+                        #print(total_entries)
 
                         if total_entries >= 100:
                             break  # Break the loop if 100 entries have been processed
@@ -128,7 +154,72 @@ def insert_data_to_fires_table(cur, conn, json_data):
                 break  # Break the loop if 100 entries have been processed
 
     
-#insert into Neighborhood table
+#insert into Neighborhood table and relationship table
+def insert_data_to_neighborhood_table(cur, conn, json_data):
+    batch_size = 25
+    total_entries = 0  # initializes total entries processed
+    fire_id = 1 #initialize fire ID
+
+    neighborhoods_set = set()  # store unique neighborhoods
+
+    for i in range(0, 101, batch_size):
+        batch = json_data[i:i + batch_size]  # slices data into batches of 25 or less
+
+        for inner_list in batch:
+            for data in inner_list:
+                try:
+                    if data.get("valid_incident_rspns_time_indc") == "Y":
+                        neighborhood = data["incident_borough"]
+                        
+                        # Check if the neighborhood has already been added
+                        if neighborhood not in neighborhoods_set:
+                            neighborhoods_set.add(neighborhood)
+                            
+                            # Insert neighborhoods into the neighborhood_ID table
+                            cur.execute(
+                                '''
+                                INSERT INTO neighborhood_ID (Neighborhood) 
+                                VALUES (?)
+                                ''',
+                                (neighborhood,)
+                            )
+
+                        #retrieve the Neighborhood_ID of the inserted neighborhood
+                        cur.execute(
+                                '''
+                                SELECT last_insert_rowid()                                
+                                '''
+                            )
+                        neighborhood_id = cur.fetchone()[0]   
+
+                         # Insert the relationship into the Fire_Neighborhood_Relationship table
+                        cur.execute(
+                                '''
+                                INSERT INTO Fire_Neighborhood_Relationship (Fire_ID, Neighborhood_ID) 
+                                VALUES (?, ?)
+                                ''',
+                                (fire_id, neighborhood_id)
+                            ) 
+
+                        total_entries += 1
+                        fire_id += 1
+                        #print(total_entries)
+                        #print (neighborhoods_set)
+
+
+                        if total_entries >= 100:
+                            break  # Break the loop if 100 entries have been processed
+                    
+                except KeyError as e:
+                    print("Key Error:", e, "Skipping this data entry.")
+        
+            if total_entries >= 100:
+                break  # Break the loop if 100 entries have been processed
+        
+        conn.commit()  # Commit the transaction
+
+        if total_entries >= 100:
+            break  # Break the loop if 100 entries have been processed
 
 #step 2 Calculate something from the data
 
@@ -136,16 +227,18 @@ def insert_data_to_fires_table(cur, conn, json_data):
 
 def main():
     get_fire_data("Structural Fires")
-    get_fire_data("NonStructural Fires")
 
     try:
         #set up the database
         cur, conn = set_up_database("fire_data.db")
         create_first_nyc_table(cur, conn)
+        create_neighborhood_table(cur, conn)
+        create_fire_neighborhood_relationship_table(cur, conn)
         with open("NYC_data.json", "r") as json_file:
             NYC_data = json.load(json_file)
 
         insert_data_to_fires_table(cur, conn, NYC_data)
+        insert_data_to_neighborhood_table(cur, conn, NYC_data)
 
         # Call the calculate_avg_fires_per_2hr function
         

@@ -255,30 +255,31 @@ def calculate_avg_fires_per_neighborhood(cur, conn):
     except Exception as e:
         print("An error occurred while calculating the average number of fires per neighborhood:", e)
 
+
 #function that calculates average response time for 2 hour time periods for fires in NYC 
 def calculate_avg_response_time_per_period(cur, conn):
     try:
         cur.execute('''
-            SELECT CAST(SUBSTR(Time, 1, 2) AS INTEGER) AS hour,
-                   ROUND(AVG(Response_time), 2) AS avg_response_time
+            SELECT 
+                ((CAST(SUBSTR(Time, 1, 2) AS INTEGER) + 1) / 2) % 12 AS period,
+                ROUND(AVG(Response_time), 2) AS avg_response_time
             FROM NYC_Fires
-            GROUP BY hour
+            GROUP BY period
         ''')
 
         avg_response_times_per_period = cur.fetchall()
 
         with open("calculations.txt", 'a') as f:  # Append to the file
             f.write("\nAverage response time per 2-hour period in NYC:\n")
-            for hour, avg_response_time in avg_response_times_per_period:
-                period_start = "{:02d}:00".format(hour)
-                period_end = "{:02d}:59".format((hour + 1) % 24)  # Next hour minus 1 minute
-                period = f"{period_start} - {period_end}"
-                f.write(f"{period}: {avg_response_time} minutes\n")
+            for period, avg_response_time in avg_response_times_per_period:
+                period_start = "{:02d}:00".format((period * 2) % 24)
+                period_end = "{:02d}:59".format((period * 2 + 1) % 24)
+                period_str = f"{period_start} - {period_end}"
+                f.write(f"{period_str}: {avg_response_time} minutes\n")
 
         print("Average response time per 2-hour period calculated and written to calculations.txt.")
     except Exception as e:
         print("An error occurred while calculating the average response time per period:", e)
-
 
 
 def main():

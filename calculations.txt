@@ -4,3 +4,17 @@ BROOKLYN: 23
 MANHATTAN: 18
 QUEENS: 24
 RICHMOND / STATEN ISLAND: 6
+
+Average response time per 2-hour period in NYC:
+00:00 - 01:59: 3.8 minutes
+02:00 - 03:59: 3.24 minutes
+04:00 - 05:59: 4.73 minutes
+06:00 - 07:59: 4.85 minutes
+08:00 - 09:59: 4.99 minutes
+10:00 - 11:59: 4.12 minutes
+12:00 - 13:59: 4.73 minutes
+14:00 - 15:59: 4.3 minutes
+16:00 - 17:59: 4.61 minutes
+18:00 - 19:59: 3.92 minutes
+20:00 - 21:59: 4.27 minutes
+22:00 - 23:59: 4.46 minutes

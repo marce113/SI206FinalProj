@@ -2,7 +2,6 @@ import sqlite3
 import csv
 import json
 import os
-import unittest
 import requests
 from datetime import datetime
 import matplotlib.pyplot as plt

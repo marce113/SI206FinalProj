@@ -4,7 +4,7 @@ import json
 import os
 import unittest
 import requests
-import re
+import regit
 from datetime import datetime
 
 

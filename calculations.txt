@@ -1,0 +1,6 @@
+Average number of fires per neighborhood:
+BRONX: 29
+BROOKLYN: 23
+MANHATTAN: 18
+QUEENS: 24
+RICHMOND / STATEN ISLAND: 6

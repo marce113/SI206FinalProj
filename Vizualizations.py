@@ -7,10 +7,22 @@ import matplotlib.pyplot as plt
 def create_neighborhood_viz(file_path):
     neighborhoods = []
     num_fires = []
+    section_found = False
     
     with open(file_path, 'r') as file:
         lines = file.readlines()
-        for line in lines[1:]:  # Skip the header line
+        for line in lines:
+            if not section_found:
+                if "Average number of fires per neighborhood" in line:
+                    section_found = True
+                continue
+            
+            if "Average response time per 2-hour period" in line:
+                break
+            
+            if ':' not in line:
+                continue
+                
             neighborhood, num_fire = line.strip().split(': ')
             neighborhoods.append(neighborhood)
             num_fires.append(int(num_fire))
@@ -20,36 +32,21 @@ def create_neighborhood_viz(file_path):
     plt.title('Average Number of Fires per Neighborhood')
     plt.xlabel('Neighborhood')
     plt.ylabel('Number of Fires')
-    plt.xticks(rotation=45)
+    plt.xticks(rotation=0)
     plt.tight_layout()
     plt.show()
 
 #creates plot for average response time for each two hour period in the day
-def plot_avg_response_time_per_period(file_path):
-    periods = []
-    avg_response_times = []
-    
-    with open(file_path, 'r') as file:
-        lines = file.readlines()
-        for line in lines[1:]:  # Skip the header line
-            period, avg_response_time = line.strip().split(': ')
-            periods.append(period)
-            avg_response_times.append(float(avg_response_time.split()[0]))
-    
-    plt.figure(figsize=(10, 6))
-    plt.plot(periods, avg_response_times, marker='o', color='green')
-    plt.title('Average Response Time per 2-hour Period in NYC')
-    plt.xlabel('Time Period')
-    plt.ylabel('Average Response Time (minutes)')
-    plt.xticks(rotation=45)
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
+def create_NYC_response_time_viz(file_path):
+
+
 
 
 def main():
     try:
-        create_neighborhood_viz("calculations.txt")
+        #create_neighborhood_viz("calculations.txt")
+        create_NYC_response_time_viz("calculations.txt")
+
 
     except Exception as e:
         print("An error has occured:", e)

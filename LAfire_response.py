@@ -8,7 +8,7 @@ def get_fire_dep_data(classification_group):
     response = requests.get(base_url, params={"$where": "on_scene_time_gmt IS NOT NULL"})
 
     try:
-        response.raise_for_status()  
+        response.raise_for_status()  # Raise an exception for HTTP errors
         data = response.json()
         if data:
             try:
@@ -16,7 +16,7 @@ def get_fire_dep_data(classification_group):
                     existing_data = json.load(json_file)
             except (FileNotFoundError, json.decoder.JSONDecodeError):
                 existing_data = []
-  
+            # Append only the relevant entries to existing data
             existing_data.extend(data)
             with open("LA_data.json", "w") as json_file:
                 json.dump(existing_data, json_file, indent=4)
@@ -39,7 +39,7 @@ def set_up_database(db_name):
 def create_first_table(cur, conn):
     cur.execute(
         '''
-        CREATE TABLE IF NOT EXISTS "LA_Fires" (
+        CREATE TABLE IF NOT EXISTS "Fires" (
             "Fire_id" INTEGER PRIMARY KEY, 
             "Time" TEXT, 
             "Response_time" FLOAT
@@ -47,105 +47,68 @@ def create_first_table(cur, conn):
         '''
     )
 
-def insert_data_to_fires_table(cur, conn):
-    total_entries = 0
-    total_batches = 0  
+  
 
-    batches_per_period = {}
+def insert_data_to_fires_table(cur, conn, json_data):
+    batch_size = 25 
+    total_entries = 0 
 
-    base_url = "https://data.lacity.org/resource/n44u-wxe4.json"
-    response = requests.get(base_url, params={"$where": "on_scene_time_gmt IS NOT NULL"})
+    for i in range(-1, min(len(json_data), 101), batch_size):  # Process up to 100 entries
+        batch = json_data[i:i+batch_size]  # Slice the data into batches of 25 or less
 
-    try:
-        response.raise_for_status()  
-        data = response.json()
+        data_buffer = [] 
 
-        for data_entry in data:
+        for data in batch:
             try:
-                if "on_scene_time_gmt" in data_entry and "incident_creation_time_gmt" in data_entry:
-                    # Extract incident creation and on-scene times
-                    incident_creation_time = data_entry["incident_creation_time_gmt"]
-                    on_scene_time = data_entry["on_scene_time_gmt"]
-
+                if "on_scene_time_gmt" in data and "incident_creation_time_gmt" in data:
             
-                    hour = incident_creation_time.split(":")[0]
+                    incident_creation_time = datetime.strptime(data["incident_creation_time_gmt"], "%H:%M:%S.%f")
+                
+                    on_scene_time = datetime.strptime(data["on_scene_time_gmt"], "%H:%M:%S.%f")
 
-              
-                    if total_batches >= 100:
-                        break
 
-                    if hour not in batches_per_period:
-                        batches_per_period[hour] = 1
-                    elif batches_per_period[hour] >= 8:
-                        continue 
-                    else:
-                        batches_per_period[hour] += 1
+                    Time = incident_creation_time.strftime("%H:%M")
 
-              
-                    response_time = (datetime.strptime(on_scene_time, "%H:%M:%S.%f") - datetime.strptime(incident_creation_time, "%H:%M:%S.%f")).total_seconds() / 60
-                    response_time = round(response_time, 2)
 
-                    cur.execute(
-                        '''
-                        INSERT INTO LA_Fires (Time, Response_time) 
-                        VALUES (?, ?)
-                        ''',
-                        (incident_creation_time[:2] + ":00", response_time)
-                    )
-                    conn.commit()
-                    total_entries += 1
-                    total_batches += 1 
+                    Response_time = (on_scene_time - incident_creation_time).total_seconds() / 60
+                    Response_time = round(Response_time, 2) 
 
-            except KeyError:
-                print("Skipping incomplete data entry.")
+                
+                    data_buffer.append((Time, Response_time))
+                    total_entries += 1  
 
-        print("Data insertion completed.")
+            except KeyError as e:
+                print("KeyError:", e, "Skipping this data entry.")
+            except ValueError as e:
+                print("ValueError:", e, "Skipping this data entry. Likely incorrect time format.")
 
-    except requests.exceptions.HTTPError as err:
-        print("HTTP error occurred:", err)
-    except json.decoder.JSONDecodeError as err:
-        print("Error decoding JSON response:", err)
+        # Insert data from the buffer into the table
+        cur.executemany(
+            '''
+            INSERT INTO Fires (Time, Response_time) 
+            VALUES (?, ?)
+            ''',
+            data_buffer
+        )
+        conn.commit()
+
+        # Check if total entries processed is equal to or exceeds 100
+        if total_entries >= 100:
+            break  # Break the loop if 100 entries have been processed
 
 
 
 
-
-
-
-def calculate_avg_response_time_per_period(cur, conn):
-    try:
-        cur.execute('''
-            SELECT 
-                ((CAST(SUBSTR(Time, 1, 2) AS INTEGER) + 1) / 2) % 12 AS period,
-                ROUND(AVG(Response_time), 2) AS avg_response_time
-            FROM LA_Fires
-            GROUP BY period
-        ''')
-
-        avg_response_times_per_period = cur.fetchall()
-
-        with open("calculations.txt", 'a') as f:  
-            f.write("\nAverage response time per 2-hour period in LA:\n")
-            for period, avg_response_time in avg_response_times_per_period:
-                period_start = "{:02d}:00".format((period * 2) % 24)
-                period_end = "{:02d}:59".format((period * 2 + 1) % 24)
-                period_str = f"{period_start} - {period_end}"
-                f.write(f"{period_str}: {avg_response_time} minutes\n")
-
-        print("Average response time per 2-hour period calculated and written to calculations.txt.")
-    except Exception as e:
-        print("An error occurred while calculating the average response time per period:", e)
 
 
 def main():
     try:
-        cur, conn = set_up_database("fire_data.db")  
+        cur, conn = set_up_database("la.db")  # Corrected: "la.db" should be a string
         create_first_table(cur, conn)
         with open("LA_data.json", "r") as json_file:
             LA_data = json.load(json_file)
 
-        insert_data_to_fires_table(cur, conn, ) 
-        calculate_avg_response_time_per_period(cur, conn)
+        insert_data_to_fires_table(cur, conn, LA_data)  # Corrected: Call insert_data_to_fires_table
 
         conn.close()
     except Exception as e:

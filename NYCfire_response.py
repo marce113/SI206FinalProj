@@ -1,5 +1,4 @@
 import sqlite3
-import csv
 import json
 import os
 import requests
@@ -62,12 +61,6 @@ def set_up_database(db_name):
     conn.commit()
 
     return cur, conn
-
-#function to delete database so that I have a fresh db when we run the program
-def delete_database(db_name):
-    if os.path.exists(db_name):
-        os.remove(db_name)
-        print(f"Deleted existing database file: {db_name}")
 
 #create table for structural fires in NYC 
 #calculate response time based on first on scene and incident time 

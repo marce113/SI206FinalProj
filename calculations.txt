@@ -1,9 +1,9 @@
 Average number of fires per neighborhood:
-BRONX: 25
-BROOKLYN: 20
-MANHATTAN: 15
-QUEENS: 20
-RICHMOND / STATEN ISLAND: 5
+BRONX: 20
+BROOKLYN: 31
+MANHATTAN: 18
+QUEENS: 22
+RICHMOND / STATEN ISLAND: 7
 
 Average response time per 2-hour period in NYC:
 00:00 - 01:59: 3.45 minutes
